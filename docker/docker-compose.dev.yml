@@ -1,0 +1,69 @@
+# Docker Compose for local development
+#
+# Usage:
+#   Start the server:
+#     docker-compose -f docker/docker-compose.dev.yml up
+#
+#   Rebuild and start:
+#     docker-compose -f docker/docker-compose.dev.yml up --build
+#
+#   Stop:
+#     docker-compose -f docker/docker-compose.dev.yml down
+
+version: "3.8"
+
+services:
+  kepler-mcp-gitlab:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    ports:
+      - "8000:8000"
+    environment:
+      # Core configuration
+      KEPLER_MCP_APP_NAME: "Kepler MCP Server (Dev)"
+      KEPLER_MCP_ENVIRONMENT: dev
+      KEPLER_MCP_LOG_LEVEL: DEBUG
+      KEPLER_MCP_TRANSPORT_MODE: sse
+      KEPLER_MCP_HOST: "0.0.0.0"
+      KEPLER_MCP_PORT: "8000"
+
+      # Rate limiting
+      KEPLER_MCP_RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+      KEPLER_MCP_RATE_LIMIT_BURST: "10"
+
+      # OAuth User Authentication (uncomment and configure as needed)
+      # KEPLER_MCP_OAUTH_USER_AUTH_ENABLED: "true"
+      # KEPLER_MCP_OAUTH_AUTHORIZATION_URL: "https://gitlab.example.com/oauth/authorize"
+      # KEPLER_MCP_OAUTH_TOKEN_URL: "https://gitlab.example.com/oauth/token"
+      # KEPLER_MCP_OAUTH_CLIENT_ID: "${KEPLER_MCP_OAUTH_CLIENT_ID}"
+      # KEPLER_MCP_OAUTH_CLIENT_SECRET: "${KEPLER_MCP_OAUTH_CLIENT_SECRET}"
+      # KEPLER_MCP_OAUTH_REDIRECT_URI: "http://localhost:8000/oauth/callback"
+      # KEPLER_MCP_OAUTH_SCOPE: "read_api read_user"
+      # KEPLER_MCP_OAUTH_USERINFO_URL: "https://gitlab.example.com/api/v4/user"
+
+      # Token encryption (required if persisting tokens)
+      # KEPLER_MCP_TOKEN_ENCRYPTION_KEY: "${KEPLER_MCP_TOKEN_ENCRYPTION_KEY}"
+      # KEPLER_MCP_TOKEN_STORE_PATH: "/app/data/tokens.enc"
+
+      # OAuth Service Authentication (uncomment for service-to-service auth)
+      # KEPLER_MCP_OAUTH_SERVICE_AUTH_ENABLED: "true"
+      # KEPLER_MCP_OAUTH_SERVICE_CLIENT_ID: "${KEPLER_MCP_OAUTH_SERVICE_CLIENT_ID}"
+      # KEPLER_MCP_OAUTH_SERVICE_CLIENT_SECRET: "${KEPLER_MCP_OAUTH_SERVICE_CLIENT_SECRET}"
+      # KEPLER_MCP_OAUTH_SERVICE_TOKEN_URL: "https://auth.example.com/oauth/token"
+
+    volumes:
+      # Mount source for development (hot reload)
+      - ../src:/app/src:ro
+      # Persist token data
+      # - ./data:/app/data
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    restart: unless-stopped
