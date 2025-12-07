@@ -1,103 +1,100 @@
 """Application-specific tool registration hook.
 
 This module provides the extension point for registering
-application-specific tools. When creating a specific MCP server
-(e.g., GitLab, JIRA), modify this file to register the
-appropriate tools.
+GitLab-specific tools for the MCP server.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from fastmcp import Context  # noqa: TC002 - needed at runtime for FastMCP injection
+
+from kepler_mcp_gitlab.context import (
+    get_gitlab_client_for_context,
+    get_session_manager,
+    set_session_manager,
+)
 from kepler_mcp_gitlab.logging_config import get_logger
+from kepler_mcp_gitlab.tools.issues import register_issue_tools
+from kepler_mcp_gitlab.tools.merge_requests import register_merge_request_tools
+from kepler_mcp_gitlab.tools.projects import register_project_tools
 
 if TYPE_CHECKING:
     from kepler_mcp_gitlab.config import Config
 
 logger = get_logger(__name__)
 
+# Re-export for backwards compatibility
+__all__ = [
+    "get_gitlab_client_for_context",
+    "get_session_manager",
+    "register_application_tools",
+    "set_session_manager",
+]
+
 
 def register_application_tools(app: Any, config: Config) -> None:
-    """Register application-specific tools on the FastMCP app.
+    """Register GitLab tools on the FastMCP app.
 
-    This function is the main extension point for application-specific
-    integrations. When building a server for a specific service
-    (e.g., GitLab, JIRA, Confluence), implement the tool registration
-    logic here.
-
-    IMPORTANT: This function should not perform blocking network I/O.
-    API clients and auth strategies can be constructed here, but
-    all external calls must happen inside the tool functions.
+    This function registers all GitLab API tools including:
+    - Project tools (list, get, search projects)
+    - Issue tools (list, create, update, comment on issues)
+    - Merge Request tools (list, create, merge, approve MRs)
 
     Args:
         app: FastMCP application instance
-        config: Application configuration (may include custom fields)
-
-    Example:
-        For a GitLab integration:
-
-        ```python
-        def register_application_tools(app: Any, config: Config) -> None:
-            from myapp.gitlab_tools import (
-                list_projects,
-                get_merge_requests,
-                create_issue,
-            )
-
-            # Register tools
-            app.tool(list_projects)
-            app.tool(get_merge_requests)
-            app.tool(create_issue)
-        ```
+        config: Application configuration with GitLab settings
     """
-    # Register example echo tool for template demonstration
-    _register_example_tools(app, config)
+    # Register all tool modules
+    # Tools will use get_gitlab_client_for_context() to get authenticated clients
+    register_project_tools(app, config)
+    register_issue_tools(app, config)
+    register_merge_request_tools(app, config)
 
-    logger.debug("Application tools registered")
+    # Register utility tools
+    _register_utility_tools(app, config)
+
+    logger.info(
+        "GitLab tools registered for %s",
+        config.gitlab_url,
+    )
 
 
-def _register_example_tools(app: Any, config: Config) -> None:
-    """Register example tools for template demonstration.
-
-    These tools serve as examples and can be removed when
-    implementing a real integration.
+def _register_utility_tools(app: Any, config: Config) -> None:
+    """Register utility tools for debugging and info.
 
     Args:
         app: FastMCP application instance
         config: Application configuration
     """
+    _session_manager = get_session_manager()
 
-    @app.tool()  # type: ignore[untyped-decorator]
-    def echo(message: str) -> str:
-        """Echo a message back to the client.
-
-        A simple example tool that demonstrates the tool interface.
-
-        Args:
-            message: The message to echo
+    @app.tool()
+    async def get_current_user(ctx: Context) -> dict[str, Any]:
+        """Get information about the currently authenticated GitLab user.
 
         Returns:
-            The same message prefixed with application name
+            User object with id, username, name, email, avatar_url,
+            web_url, and other profile information.
         """
-        return f"[{config.app_name}] {message}"
+        try:
+            client = await get_gitlab_client_for_context(ctx, config)
+            return await client.get_current_user()
+        except Exception as e:
+            return {"error": str(e)}
 
-    @app.tool()  # type: ignore[untyped-decorator]
-    def get_config_info() -> dict[str, str]:
-        """Get non-sensitive configuration information.
-
-        Returns basic server configuration for debugging purposes.
-        Does not expose any secrets or sensitive values.
+    @app.tool()
+    def get_gitlab_config() -> dict[str, str]:
+        """Get the current GitLab configuration (non-sensitive info only).
 
         Returns:
-            Dictionary with configuration details
+            Dictionary with gitlab_url and auth_method
         """
+        auth_method = "oauth" if _session_manager is not None else "none"
         return {
-            "app_name": config.app_name,
-            "environment": config.environment.value,
-            "transport_mode": config.transport_mode.value,
-            "oauth_user_auth_enabled": str(config.oauth_user_auth_enabled),
-            "oauth_service_auth_enabled": str(config.oauth_service_auth_enabled),
+            "gitlab_url": config.gitlab_url,
+            "auth_method": auth_method,
         }
 
-    logger.debug("Example tools registered (echo, get_config_info)")
+    logger.debug("Utility tools registered")

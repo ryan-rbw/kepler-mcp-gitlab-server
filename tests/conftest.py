@@ -40,3 +40,14 @@ def oauth_config() -> Config:
         oauth_scope="read write",
         transport_mode=TransportMode.SSE,
     )
+
+
+@pytest.fixture
+def gitlab_config() -> Config:
+    """Create a configuration with GitLab settings for testing."""
+    return Config(
+        app_name="GitLab Test Server",
+        gitlab_url="https://gitlab.example.com",
+        gitlab_token="glpat-test-token",
+        gitlab_default_project_id="test-group/test-project",
+    )

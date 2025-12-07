@@ -6,26 +6,100 @@ client connection methods.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, RedirectResponse, Response
-from starlette.routing import Route
+from starlette.routing import Mount, Route
 
+from kepler_mcp_gitlab.context import (
+    register_transport_session,
+    set_session_manager,
+)
 from kepler_mcp_gitlab.logging_config import get_logger
 from kepler_mcp_gitlab.security import generate_secure_token
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
     from starlette.requests import Request
+    from starlette.types import ASGIApp, Receive, Scope, Send
 
     from kepler_mcp_gitlab.config import Config
     from kepler_mcp_gitlab.oauth.flows import OAuth2AuthorizationCodeFlow
     from kepler_mcp_gitlab.oauth.session import PendingAuthState, SessionManager
 
 logger = get_logger(__name__)
+
+
+class OAuthSessionMiddleware:
+    """ASGI middleware to capture OAuth session from cookies and link to MCP transport.
+
+    This middleware intercepts requests to the /messages endpoint and extracts
+    the MCP transport session ID from the query params, then links it to the
+    OAuth session from the cookie set during initial SSE connection.
+    """
+
+    def __init__(self, app: ASGIApp, session_manager: SessionManager | None) -> None:
+        self.app = app
+        self.session_manager = session_manager
+        # Track SSE connections: MCP transport session -> OAuth session
+        self._pending_sse_sessions: dict[str, str] = {}
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+
+        # For SSE endpoint, capture the OAuth session cookie
+        if path == "/sse":
+            oauth_session_id = self._get_cookie(scope, "session_id")
+            if oauth_session_id:
+                # Store temporarily - we'll link it when we see the session ID
+                # The SSE response will contain the transport session ID
+                scope["state"] = scope.get("state", {})
+                scope["state"]["oauth_session_id"] = oauth_session_id
+                logger.debug("SSE connection with OAuth session: %s", oauth_session_id[:8])
+
+            # Wrap send to capture the transport session ID from SSE events
+            original_send = send
+
+            async def capturing_send(message: Any) -> None:
+                if message.get("type") == "http.response.body":
+                    body = message.get("body", b"")
+                    if body:
+                        body_str = body.decode("utf-8", errors="ignore")
+                        # Look for: data: /messages/?session_id=xxx
+                        if "session_id=" in body_str and oauth_session_id:
+                            import re
+
+                            match = re.search(r"session_id=([a-f0-9]+)", body_str)
+                            if match:
+                                transport_session_id = match.group(1)
+                                register_transport_session(
+                                    transport_session_id, oauth_session_id
+                                )
+                await original_send(message)
+
+            await self.app(scope, receive, capturing_send)
+            return
+
+        await self.app(scope, receive, send)
+
+    def _get_cookie(self, scope: Scope, name: str) -> str | None:
+        """Extract a cookie value from ASGI scope headers."""
+        headers = scope.get("headers", [])
+        for header_name, header_value in headers:
+            if header_name == b"cookie":
+                cookies_str = header_value.decode("utf-8", errors="ignore")
+                for raw_cookie in cookies_str.split(";"):
+                    cookie_pair = raw_cookie.strip()
+                    if cookie_pair.startswith(f"{name}="):
+                        return cookie_pair[len(name) + 1 :]
+        return None
 
 
 async def run_stdio(app: FastMCP) -> None:
@@ -62,7 +136,11 @@ def create_sse_app(
     Returns:
         Configured Starlette application
     """
-    routes: list[Route] = []
+    # Set global session manager for OAuth authentication
+    if session_manager is not None:
+        set_session_manager(session_manager)
+
+    routes: list[Route | Mount] = []
 
     # Health check endpoint
     async def health_check(request: Request) -> JSONResponse:
@@ -75,40 +153,9 @@ def create_sse_app(
 
     routes.append(Route("/health", health_check, methods=["GET"]))
 
-    # SSE endpoint for MCP messages
-    async def sse_endpoint(request: Request) -> Response:
-        """SSE endpoint for MCP message streaming."""
-        # Check authentication if OAuth is enabled
-        if config.oauth_user_auth_enabled:
-            session_id = request.cookies.get("session_id")
-            if not session_id or session_manager is None:
-                # Redirect to OAuth
-                return RedirectResponse(url="/oauth/authorize", status_code=302)
-
-            session = await session_manager.get_session(session_id)
-            if session is None:
-                return RedirectResponse(url="/oauth/authorize", status_code=302)
-
-            # Store session in request state for tools to access
-            request.state.session_id = session_id
-            request.state.user_id = session.user_id
-
-        # Delegate to FastMCP's SSE handling
-        result: Response = await mcp_app.handle_sse(request)  # type: ignore[attr-defined]
-        return result
-
-    routes.append(Route(config.sse_path, sse_endpoint, methods=["GET"]))
-
-    # Message endpoint for client-to-server messages
-    async def message_endpoint(request: Request) -> Response:
-        """HTTP endpoint for client-to-server MCP messages."""
-        result: Response = await mcp_app.handle_message(request)  # type: ignore[attr-defined]
-        return result
-
-    routes.append(Route("/message", message_endpoint, methods=["POST"]))
-
     # OAuth endpoints (if enabled)
     if config.oauth_user_auth_enabled and oauth_flow and pending_auth_state:
+
         async def oauth_authorize(request: Request) -> RedirectResponse:
             """Initiate OAuth authorization flow."""
             state = generate_secure_token(32)
@@ -177,8 +224,17 @@ def create_sse_app(
 
                 session_id = await session_manager.create_session(user_id, tokens)
 
-                # Redirect to SSE endpoint with session cookie
-                response = RedirectResponse(url=config.sse_path, status_code=302)
+                # Redirect to a success page with session cookie
+                # (SSE connection will be initiated by the MCP client)
+                response_data = {
+                    "status": "authenticated",
+                    "message": "OAuth authentication successful. You can now use the MCP server.",
+                    "sse_endpoint": config.sse_path,
+                }
+                # Include session_id in response body for local development testing
+                if config.environment.value == "local":
+                    response_data["session_id"] = session_id
+                response = JSONResponse(response_data)
                 response.set_cookie(
                     key="session_id",
                     value=session_id,
@@ -200,6 +256,16 @@ def create_sse_app(
 
         routes.append(Route("/oauth/authorize", oauth_authorize, methods=["GET"]))
         routes.append(Route("/oauth/callback", oauth_callback, methods=["GET"]))
+
+    # Get FastMCP's HTTP app configured for SSE transport and mount it
+    # FastMCP handles the SSE endpoint at the configured path
+    fastmcp_http_app = mcp_app.http_app(path=config.sse_path, transport="sse")
+
+    # Wrap with OAuth session middleware to link MCP transport sessions to OAuth sessions
+    if config.oauth_user_auth_enabled and session_manager is not None:
+        fastmcp_http_app = OAuthSessionMiddleware(fastmcp_http_app, session_manager)
+
+    routes.append(Mount("/", app=fastmcp_http_app))
 
     # CORS middleware for cross-origin requests
     middleware = [

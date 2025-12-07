@@ -136,6 +136,11 @@ class Config(BaseModel):
     )
     rate_limit_burst: int = Field(default=10, ge=1, description="Rate limit burst size")
 
+    # GitLab settings
+    gitlab_url: str = Field(
+        default="https://gitlab.com", description="GitLab instance base URL"
+    )
+
     model_config = {
         "extra": "allow",  # Allow extra fields for application-specific config
         "validate_assignment": True,
@@ -254,6 +259,7 @@ def _load_env_config() -> dict[str, Any]:
         "token_store_path": "TOKEN_STORE_PATH",
         "rate_limit_requests_per_minute": "RATE_LIMIT_REQUESTS_PER_MINUTE",
         "rate_limit_burst": "RATE_LIMIT_BURST",
+        "gitlab_url": "GITLAB_URL",
     }
 
     config: dict[str, Any] = {}

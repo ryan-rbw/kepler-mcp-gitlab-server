@@ -40,13 +40,23 @@ class TestCreateApp:
         assert "server_info" in tool_names
 
     def test_registers_application_tools(self, default_config: Config) -> None:
-        """Test that application tools are registered."""
+        """Test that GitLab tools are registered."""
         app = create_app(default_config)
 
-        # Check that example tools from application.py are registered
+        # Check that GitLab tools from application.py are registered
         tool_names = get_tool_names_sync(app)
-        assert "echo" in tool_names
-        assert "get_config_info" in tool_names
+        # Project tools
+        assert "list_projects" in tool_names
+        assert "get_project" in tool_names
+        # Issue tools
+        assert "list_issues" in tool_names
+        assert "create_issue" in tool_names
+        # Merge request tools
+        assert "list_merge_requests" in tool_names
+        assert "create_merge_request" in tool_names
+        # Utility tools
+        assert "get_current_user" in tool_names
+        assert "get_gitlab_config" in tool_names
 
     def test_extra_registrars_called(self, default_config: Config) -> None:
         """Test that extra tool registrars are called."""
