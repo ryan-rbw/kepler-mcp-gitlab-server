@@ -26,7 +26,7 @@ def register_health_tools(app: Any, config: Config) -> None:
         config: Application configuration
     """
 
-    @app.tool()  # type: ignore[untyped-decorator]
+    @app.tool()
     def ping() -> str:
         """Simple ping/pong health check.
 
@@ -38,7 +38,7 @@ def register_health_tools(app: Any, config: Config) -> None:
         """
         return "pong"
 
-    @app.tool()  # type: ignore[untyped-decorator]
+    @app.tool()
     def health_status() -> dict[str, str]:
         """Get server health status.
 

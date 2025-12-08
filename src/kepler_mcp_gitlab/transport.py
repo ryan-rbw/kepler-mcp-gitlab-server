@@ -6,7 +6,7 @@ client connection methods.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -91,7 +91,9 @@ class OAuthSessionMiddleware:
 
     def _get_cookie(self, scope: Scope, name: str) -> str | None:
         """Extract a cookie value from ASGI scope headers."""
-        headers = scope.get("headers", [])
+        headers: list[tuple[bytes, bytes]] = cast(
+            "list[tuple[bytes, bytes]]", scope.get("headers", [])
+        )
         for header_name, header_value in headers:
             if header_name == b"cookie":
                 cookies_str = header_value.decode("utf-8", errors="ignore")
@@ -259,11 +261,13 @@ def create_sse_app(
 
     # Get FastMCP's HTTP app configured for SSE transport and mount it
     # FastMCP handles the SSE endpoint at the configured path
-    fastmcp_http_app = mcp_app.http_app(path=config.sse_path, transport="sse")
+    base_http_app = mcp_app.http_app(path=config.sse_path, transport="sse")
 
     # Wrap with OAuth session middleware to link MCP transport sessions to OAuth sessions
     if config.oauth_user_auth_enabled and session_manager is not None:
-        fastmcp_http_app = OAuthSessionMiddleware(fastmcp_http_app, session_manager)
+        fastmcp_http_app: ASGIApp = OAuthSessionMiddleware(base_http_app, session_manager)
+    else:
+        fastmcp_http_app = base_http_app
 
     routes.append(Mount("/", app=fastmcp_http_app))
 

@@ -67,6 +67,28 @@ Once connected, users can ask their AI assistant to:
 | `approve_merge_request` | Approve an MR |
 | `get_merge_request_changes` | Get MR diff |
 | `list_merge_request_discussions` | List review threads |
+| **Repository** | |
+| `list_branches` | List repository branches |
+| `get_branch` | Get branch details |
+| `create_branch` | Create a new branch |
+| `delete_branch` | Delete a branch |
+| `list_tags` | List repository tags |
+| `get_tag` | Get tag details |
+| `create_tag` | Create a new tag |
+| `delete_tag` | Delete a tag |
+| `compare_branches` | Compare two branches/commits |
+| `list_repository_tree` | List files and directories |
+| `get_file` | Get file metadata |
+| `get_file_content` | Get file contents (decoded) |
+| `create_file` | Create a new file |
+| `update_file` | Update an existing file |
+| `delete_file` | Delete a file |
+| `get_file_blame` | Get file blame/history |
+| `list_commits` | List repository commits |
+| `get_commit` | Get commit details |
+| `get_commit_diff` | Get commit diff |
+| `cherry_pick_commit` | Cherry-pick a commit |
+| `get_commit_refs` | Get refs containing a commit |
 | **Utilities** | |
 | `get_current_user` | Get authenticated user info |
 | `get_gitlab_config` | Get server configuration |
@@ -373,7 +395,8 @@ src/kepler_mcp_gitlab/
 └── tools/
     ├── projects.py     # Project tools
     ├── issues.py       # Issue tools
-    └── merge_requests.py # MR tools
+    ├── merge_requests.py # MR tools
+    └── repository.py   # Repository tools (branches, tags, files, commits)
 ```
 
 ---

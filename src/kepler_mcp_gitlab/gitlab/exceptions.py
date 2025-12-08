@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class GitLabAPIError(Exception):
     """Base exception for GitLab API errors.
@@ -16,7 +18,7 @@ class GitLabAPIError(Exception):
         self,
         message: str,
         status_code: int | None = None,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -36,7 +38,7 @@ class GitLabAuthenticationError(GitLabAPIError):
         self,
         message: str = "Authentication failed. Check your GitLab token.",
         status_code: int = 401,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)
 
@@ -48,7 +50,7 @@ class GitLabNotFoundError(GitLabAPIError):
         self,
         message: str = "Resource not found.",
         status_code: int = 404,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)
 
@@ -64,7 +66,7 @@ class GitLabRateLimitError(GitLabAPIError):
         self,
         message: str = "Rate limit exceeded.",
         status_code: int = 429,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
         retry_after: int | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)
@@ -78,7 +80,7 @@ class GitLabValidationError(GitLabAPIError):
         self,
         message: str = "Request validation failed.",
         status_code: int = 400,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)
 
@@ -90,7 +92,7 @@ class GitLabForbiddenError(GitLabAPIError):
         self,
         message: str = "Access forbidden. Check your permissions.",
         status_code: int = 403,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)
 
@@ -102,6 +104,6 @@ class GitLabConflictError(GitLabAPIError):
         self,
         message: str = "Resource conflict.",
         status_code: int = 409,
-        response_body: dict | str | None = None,
+        response_body: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, response_body)

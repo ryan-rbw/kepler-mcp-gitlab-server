@@ -28,7 +28,7 @@ def register_info_tools(app: Any, config: Config) -> None:
         config: Application configuration
     """
 
-    @app.tool()  # type: ignore[untyped-decorator]
+    @app.tool()
     def server_info() -> dict[str, str]:
         """Get server version and metadata.
 

@@ -206,6 +206,15 @@ module = [
 ]
 ignore_missing_imports = true
 
+# FastMCP's @app.tool() decorator returns untyped callables
+# These modules use FastMCP tools extensively
+[[tool.mypy.overrides]]
+module = [
+    "kepler_mcp_gitlab.tools.*",
+    "kepler_mcp_gitlab.application",
+]
+disallow_untyped_decorators = false
+
 [tool.bandit]
 exclude_dirs = ["tests", "scripts"]
 skips = ["B101"]  # assert_used - OK in tests
