@@ -5,6 +5,7 @@ Provides an async HTTP client for interacting with the GitLab REST API.
 
 from __future__ import annotations
 
+import base64
 import urllib.parse
 from typing import TYPE_CHECKING, Any
 
@@ -1085,6 +1086,650 @@ class GitLabClient:
         encoded_id = self._encode_project_id(project_id)
         result = await self._get(
             f"/projects/{encoded_id}/merge_requests/{merge_request_iid}/participants",
+        )
+        return list(result)
+
+    # -------------------------------------------------------------------------
+    # Repository endpoints
+    # -------------------------------------------------------------------------
+
+    async def list_branches(
+        self,
+        project_id: str | int,
+        search: str | None = None,
+        regex: str | None = None,
+        per_page: int = DEFAULT_PER_PAGE,
+        max_pages: int | None = 1,
+    ) -> list[dict[str, Any]]:
+        """List branches in a project.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            search: Search term for branch names
+            regex: Regex pattern for branch names
+            per_page: Results per page
+            max_pages: Maximum pages to fetch
+
+        Returns:
+            List of branch dictionaries
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "search": search,
+            "regex": regex,
+        }
+        return await self._paginate(
+            f"/projects/{encoded_id}/repository/branches",
+            params,
+            per_page,
+            max_pages,
+        )
+
+    async def get_branch(
+        self,
+        project_id: str | int,
+        branch_name: str,
+    ) -> dict[str, Any]:
+        """Get a single branch.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            branch_name: Branch name (URL-encoded if contains special chars)
+
+        Returns:
+            Branch details dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_branch = urllib.parse.quote(branch_name, safe="")
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/branches/{encoded_branch}"
+        )
+        return dict(result)
+
+    async def create_branch(
+        self,
+        project_id: str | int,
+        branch_name: str,
+        ref: str,
+    ) -> dict[str, Any]:
+        """Create a new branch.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            branch_name: Name for the new branch
+            ref: Branch name or commit SHA to branch from
+
+        Returns:
+            Created branch dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        data = {
+            "branch": branch_name,
+            "ref": ref,
+        }
+        result = await self._post(
+            f"/projects/{encoded_id}/repository/branches",
+            json_data=data,
+        )
+        return dict(result)
+
+    async def delete_branch(
+        self,
+        project_id: str | int,
+        branch_name: str,
+    ) -> None:
+        """Delete a branch.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            branch_name: Branch name to delete
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_branch = urllib.parse.quote(branch_name, safe="")
+        await self._delete(
+            f"/projects/{encoded_id}/repository/branches/{encoded_branch}"
+        )
+
+    async def list_tags(
+        self,
+        project_id: str | int,
+        search: str | None = None,
+        order_by: str = "updated",
+        sort: str = "desc",
+        per_page: int = DEFAULT_PER_PAGE,
+        max_pages: int | None = 1,
+    ) -> list[dict[str, Any]]:
+        """List tags in a project.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            search: Search term for tag names
+            order_by: Order by field (name, updated)
+            sort: Sort direction (asc, desc)
+            per_page: Results per page
+            max_pages: Maximum pages to fetch
+
+        Returns:
+            List of tag dictionaries
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "search": search,
+            "order_by": order_by,
+            "sort": sort,
+        }
+        return await self._paginate(
+            f"/projects/{encoded_id}/repository/tags",
+            params,
+            per_page,
+            max_pages,
+        )
+
+    async def get_tag(
+        self,
+        project_id: str | int,
+        tag_name: str,
+    ) -> dict[str, Any]:
+        """Get a single tag.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            tag_name: Tag name
+
+        Returns:
+            Tag details dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_tag = urllib.parse.quote(tag_name, safe="")
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/tags/{encoded_tag}"
+        )
+        return dict(result)
+
+    async def create_tag(
+        self,
+        project_id: str | int,
+        tag_name: str,
+        ref: str,
+        message: str | None = None,
+        release_description: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new tag.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            tag_name: Name for the new tag
+            ref: Branch name or commit SHA to tag
+            message: Tag message (creates annotated tag)
+            release_description: Release notes (creates a release)
+
+        Returns:
+            Created tag dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        data: dict[str, Any] = {
+            "tag_name": tag_name,
+            "ref": ref,
+        }
+        if message:
+            data["message"] = message
+        if release_description:
+            data["release_description"] = release_description
+        result = await self._post(
+            f"/projects/{encoded_id}/repository/tags",
+            json_data=data,
+        )
+        return dict(result)
+
+    async def delete_tag(
+        self,
+        project_id: str | int,
+        tag_name: str,
+    ) -> None:
+        """Delete a tag.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            tag_name: Tag name to delete
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_tag = urllib.parse.quote(tag_name, safe="")
+        await self._delete(
+            f"/projects/{encoded_id}/repository/tags/{encoded_tag}"
+        )
+
+    async def compare_branches(
+        self,
+        project_id: str | int,
+        from_ref: str,
+        to_ref: str,
+        straight: bool = False,
+    ) -> dict[str, Any]:
+        """Compare two branches, tags, or commits.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            from_ref: Base branch/tag/commit
+            to_ref: Target branch/tag/commit
+            straight: Use straight comparison (vs. merge-base)
+
+        Returns:
+            Comparison dictionary with commits and diffs
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "from": from_ref,
+            "to": to_ref,
+            "straight": straight if straight else None,
+        }
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/compare",
+            params,
+        )
+        return dict(result)
+
+    async def list_repository_tree(
+        self,
+        project_id: str | int,
+        path: str | None = None,
+        ref: str | None = None,
+        recursive: bool = False,
+        per_page: int = DEFAULT_PER_PAGE,
+        max_pages: int | None = 1,
+    ) -> list[dict[str, Any]]:
+        """List repository files and directories.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            path: Path inside repository
+            ref: Branch, tag, or commit to list from
+            recursive: List recursively
+            per_page: Results per page
+            max_pages: Maximum pages to fetch
+
+        Returns:
+            List of tree entries (files and directories)
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "path": path,
+            "ref": ref,
+            "recursive": recursive if recursive else None,
+        }
+        return await self._paginate(
+            f"/projects/{encoded_id}/repository/tree",
+            params,
+            per_page,
+            max_pages,
+        )
+
+    async def get_file(
+        self,
+        project_id: str | int,
+        file_path: str,
+        ref: str | None = None,
+    ) -> dict[str, Any]:
+        """Get file metadata and content from repository.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path to file in repository
+            ref: Branch, tag, or commit to get file from
+
+        Returns:
+            File dictionary with content (base64 encoded)
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_path = urllib.parse.quote(file_path, safe="")
+        params: dict[str, Any] = {}
+        if ref:
+            params["ref"] = ref
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/files/{encoded_path}",
+            params if params else None,
+        )
+        return dict(result)
+
+    async def get_file_content(
+        self,
+        project_id: str | int,
+        file_path: str,
+        ref: str | None = None,
+    ) -> str:
+        """Get decoded file content from repository.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path to file in repository
+            ref: Branch, tag, or commit to get file from
+
+        Returns:
+            Decoded file content as string
+        """
+        file_info = await self.get_file(project_id, file_path, ref)
+        content_b64 = file_info.get("content", "")
+        return base64.b64decode(content_b64).decode("utf-8")
+
+    async def create_file(
+        self,
+        project_id: str | int,
+        file_path: str,
+        branch: str,
+        content: str,
+        commit_message: str,
+        author_email: str | None = None,
+        author_name: str | None = None,
+        encoding: str = "text",
+    ) -> dict[str, Any]:
+        """Create a new file in repository.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path for the new file
+            branch: Branch to create file in
+            content: File content (plain text or base64)
+            commit_message: Commit message
+            author_email: Override author email
+            author_name: Override author name
+            encoding: Content encoding (text or base64)
+
+        Returns:
+            Created file info dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_path = urllib.parse.quote(file_path, safe="")
+        data: dict[str, Any] = {
+            "branch": branch,
+            "content": content,
+            "commit_message": commit_message,
+            "encoding": encoding,
+        }
+        if author_email:
+            data["author_email"] = author_email
+        if author_name:
+            data["author_name"] = author_name
+        result = await self._post(
+            f"/projects/{encoded_id}/repository/files/{encoded_path}",
+            json_data=data,
+        )
+        return dict(result)
+
+    async def update_file(
+        self,
+        project_id: str | int,
+        file_path: str,
+        branch: str,
+        content: str,
+        commit_message: str,
+        author_email: str | None = None,
+        author_name: str | None = None,
+        encoding: str = "text",
+        last_commit_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing file in repository.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path to existing file
+            branch: Branch containing the file
+            content: New file content (plain text or base64)
+            commit_message: Commit message
+            author_email: Override author email
+            author_name: Override author name
+            encoding: Content encoding (text or base64)
+            last_commit_id: Expected last commit ID (for conflict detection)
+
+        Returns:
+            Updated file info dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_path = urllib.parse.quote(file_path, safe="")
+        data: dict[str, Any] = {
+            "branch": branch,
+            "content": content,
+            "commit_message": commit_message,
+            "encoding": encoding,
+        }
+        if author_email:
+            data["author_email"] = author_email
+        if author_name:
+            data["author_name"] = author_name
+        if last_commit_id:
+            data["last_commit_id"] = last_commit_id
+        result = await self._put(
+            f"/projects/{encoded_id}/repository/files/{encoded_path}",
+            json_data=data,
+        )
+        return dict(result)
+
+    async def delete_file(
+        self,
+        project_id: str | int,
+        file_path: str,
+        branch: str,
+        commit_message: str,
+        author_email: str | None = None,
+        author_name: str | None = None,
+    ) -> None:
+        """Delete a file from repository.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path to file to delete
+            branch: Branch containing the file
+            commit_message: Commit message
+            author_email: Override author email
+            author_name: Override author name
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_path = urllib.parse.quote(file_path, safe="")
+        # GitLab requires these params in the query string for DELETE
+        params: dict[str, Any] = {
+            "branch": branch,
+            "commit_message": commit_message,
+        }
+        if author_email:
+            params["author_email"] = author_email
+        if author_name:
+            params["author_name"] = author_name
+        await self._delete(
+            f"/projects/{encoded_id}/repository/files/{encoded_path}",
+            params=params,
+        )
+
+    async def get_file_blame(
+        self,
+        project_id: str | int,
+        file_path: str,
+        ref: str | None = None,
+        range_start: int | None = None,
+        range_end: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get file blame information.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            file_path: Path to file
+            ref: Branch, tag, or commit
+            range_start: Starting line number
+            range_end: Ending line number
+
+        Returns:
+            List of blame entries with commit info and lines
+        """
+        encoded_id = self._encode_project_id(project_id)
+        encoded_path = urllib.parse.quote(file_path, safe="")
+        params: dict[str, Any] = {}
+        if ref:
+            params["ref"] = ref
+        if range_start:
+            params["range[start]"] = range_start
+        if range_end:
+            params["range[end]"] = range_end
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/files/{encoded_path}/blame",
+            params if params else None,
+        )
+        return list(result)
+
+    async def list_commits(
+        self,
+        project_id: str | int,
+        ref_name: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        path: str | None = None,
+        author: str | None = None,
+        all_refs: bool = False,
+        with_stats: bool = False,
+        first_parent: bool = False,
+        per_page: int = DEFAULT_PER_PAGE,
+        max_pages: int | None = 1,
+    ) -> list[dict[str, Any]]:
+        """List commits in a project.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            ref_name: Branch, tag, or commit to start from
+            since: Only commits after this ISO 8601 date
+            until: Only commits before this ISO 8601 date
+            path: Only commits affecting this path
+            author: Only commits by this author (email or username)
+            all_refs: Include commits from all refs
+            with_stats: Include commit stats
+            first_parent: Follow only first parent for merge commits
+            per_page: Results per page
+            max_pages: Maximum pages to fetch
+
+        Returns:
+            List of commit dictionaries
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "ref_name": ref_name,
+            "since": since,
+            "until": until,
+            "path": path,
+            "author": author,
+            "all": all_refs if all_refs else None,
+            "with_stats": with_stats if with_stats else None,
+            "first_parent": first_parent if first_parent else None,
+        }
+        return await self._paginate(
+            f"/projects/{encoded_id}/repository/commits",
+            params,
+            per_page,
+            max_pages,
+        )
+
+    async def get_commit(
+        self,
+        project_id: str | int,
+        sha: str,
+        stats: bool = True,
+    ) -> dict[str, Any]:
+        """Get a single commit.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            sha: Commit SHA
+            stats: Include commit stats
+
+        Returns:
+            Commit details dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "stats": stats if stats else None,
+        }
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/commits/{sha}",
+            params if params else None,
+        )
+        return dict(result)
+
+    async def get_commit_diff(
+        self,
+        project_id: str | int,
+        sha: str,
+        per_page: int = DEFAULT_PER_PAGE,
+        max_pages: int | None = 1,
+    ) -> list[dict[str, Any]]:
+        """Get diff of a commit.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            sha: Commit SHA
+            per_page: Results per page
+            max_pages: Maximum pages to fetch
+
+        Returns:
+            List of diff entries
+        """
+        encoded_id = self._encode_project_id(project_id)
+        return await self._paginate(
+            f"/projects/{encoded_id}/repository/commits/{sha}/diff",
+            per_page=per_page,
+            max_pages=max_pages,
+        )
+
+    async def cherry_pick_commit(
+        self,
+        project_id: str | int,
+        sha: str,
+        branch: str,
+        dry_run: bool = False,
+        message: str | None = None,
+    ) -> dict[str, Any]:
+        """Cherry-pick a commit to a branch.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            sha: Commit SHA to cherry-pick
+            branch: Target branch
+            dry_run: Only check if cherry-pick is possible
+            message: Custom commit message
+
+        Returns:
+            Cherry-picked commit dictionary
+        """
+        encoded_id = self._encode_project_id(project_id)
+        data: dict[str, Any] = {
+            "branch": branch,
+        }
+        if dry_run:
+            data["dry_run"] = dry_run
+        if message:
+            data["message"] = message
+        result = await self._post(
+            f"/projects/{encoded_id}/repository/commits/{sha}/cherry_pick",
+            json_data=data,
+        )
+        return dict(result)
+
+    async def get_commit_refs(
+        self,
+        project_id: str | int,
+        sha: str,
+        ref_type: str = "all",
+    ) -> list[dict[str, Any]]:
+        """Get refs (branches/tags) containing a commit.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            sha: Commit SHA
+            ref_type: Type of refs (branch, tag, all)
+
+        Returns:
+            List of ref dictionaries
+        """
+        encoded_id = self._encode_project_id(project_id)
+        params: dict[str, Any] = {
+            "type": ref_type,
+        }
+        result = await self._get(
+            f"/projects/{encoded_id}/repository/commits/{sha}/refs",
+            params,
         )
         return list(result)
 

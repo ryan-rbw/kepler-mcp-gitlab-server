@@ -12,6 +12,7 @@ This document explains how the MCP server works and provides step-by-step testin
 6. [Manual Testing with Python Script](#manual-testing-with-python-script)
 7. [Test Checklist](#test-checklist)
 8. [Troubleshooting](#troubleshooting)
+9. [Phase 3: Repository Tools Testing](#phase-3-repository-tools-testing)
 
 ---
 
@@ -206,7 +207,7 @@ pip install -e ".[dev]"
 
 ```bash
 make lint   # Linting
-make test   # Unit tests (160 tests)
+make test   # Unit tests (166 tests)
 ```
 
 ### Step 4: Start the Server
@@ -483,6 +484,170 @@ Check that:
 
 ---
 
+## Phase 3: Repository Tools Testing
+
+Phase 3 adds 21 new tools for repository operations: branches, tags, files, and commits.
+
+### Available Repository Tools
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| **Branches** | `list_branches` | List branches in a project |
+| | `get_branch` | Get details of a specific branch |
+| | `create_branch` | Create a new branch |
+| | `delete_branch` | Delete a branch |
+| **Tags** | `list_tags` | List tags in a project |
+| | `get_tag` | Get details of a specific tag |
+| | `create_tag` | Create a new tag |
+| | `delete_tag` | Delete a tag |
+| **Compare** | `compare_branches` | Compare two branches/tags/commits |
+| **Tree** | `list_repository_tree` | List files and directories |
+| **Files** | `get_file` | Get file metadata (base64 content) |
+| | `get_file_content` | Get decoded file content |
+| | `create_file` | Create a new file |
+| | `update_file` | Update an existing file |
+| | `delete_file` | Delete a file |
+| | `get_file_blame` | Get blame information |
+| **Commits** | `list_commits` | List commits in a project |
+| | `get_commit` | Get details of a commit |
+| | `get_commit_diff` | Get diff of a commit |
+| | `cherry_pick_commit` | Cherry-pick a commit |
+| | `get_commit_refs` | Get branches/tags containing a commit |
+
+### Step-by-Step Testing
+
+After completing OAuth authentication (see above), test the repository tools:
+
+#### 1. Test Branch Tools
+
+```python
+# List branches
+result = await session.call_tool("list_branches", {
+    "project_id": "your-group/your-project",
+    "per_page": 10
+})
+
+# Get specific branch
+result = await session.call_tool("get_branch", {
+    "project_id": "your-group/your-project",
+    "branch_name": "main"
+})
+
+# Create a branch (requires write access)
+result = await session.call_tool("create_branch", {
+    "project_id": "your-group/your-project",
+    "branch_name": "test-branch",
+    "ref": "main"
+})
+
+# Delete a branch (requires write access)
+result = await session.call_tool("delete_branch", {
+    "project_id": "your-group/your-project",
+    "branch_name": "test-branch"
+})
+```
+
+#### 2. Test Tag Tools
+
+```python
+# List tags
+result = await session.call_tool("list_tags", {
+    "project_id": "your-group/your-project",
+    "order_by": "updated",
+    "sort": "desc"
+})
+
+# Get specific tag
+result = await session.call_tool("get_tag", {
+    "project_id": "your-group/your-project",
+    "tag_name": "v1.0.0"
+})
+```
+
+#### 3. Test File Tools
+
+```python
+# List repository tree
+result = await session.call_tool("list_repository_tree", {
+    "project_id": "your-group/your-project",
+    "path": "src",
+    "recursive": False
+})
+
+# Get file metadata (returns base64 content)
+result = await session.call_tool("get_file", {
+    "project_id": "your-group/your-project",
+    "file_path": "README.md",
+    "ref": "main"
+})
+
+# Get decoded file content (convenience method)
+result = await session.call_tool("get_file_content", {
+    "project_id": "your-group/your-project",
+    "file_path": "README.md",
+    "ref": "main"
+})
+
+# Create a file (requires write access)
+result = await session.call_tool("create_file", {
+    "project_id": "your-group/your-project",
+    "file_path": "test/hello.txt",
+    "branch": "test-branch",
+    "content": "Hello, World!",
+    "commit_message": "Add hello.txt"
+})
+```
+
+#### 4. Test Commit Tools
+
+```python
+# List commits
+result = await session.call_tool("list_commits", {
+    "project_id": "your-group/your-project",
+    "ref_name": "main",
+    "per_page": 10
+})
+
+# Get specific commit
+result = await session.call_tool("get_commit", {
+    "project_id": "your-group/your-project",
+    "sha": "abc123def456"
+})
+
+# Get commit diff
+result = await session.call_tool("get_commit_diff", {
+    "project_id": "your-group/your-project",
+    "sha": "abc123def456"
+})
+
+# Compare branches
+result = await session.call_tool("compare_branches", {
+    "project_id": "your-group/your-project",
+    "from_ref": "main",
+    "to_ref": "develop"
+})
+```
+
+### Phase 3 Test Checklist
+
+| Tool | Test | Status |
+|------|------|--------|
+| `list_branches` | Returns list of branches | [ ] |
+| `get_branch` | Returns branch details | [ ] |
+| `create_branch` | Creates new branch (write access) | [ ] |
+| `delete_branch` | Deletes branch (write access) | [ ] |
+| `list_tags` | Returns list of tags | [ ] |
+| `get_tag` | Returns tag details | [ ] |
+| `list_repository_tree` | Returns file/directory listing | [ ] |
+| `get_file` | Returns file with base64 content | [ ] |
+| `get_file_content` | Returns decoded file content | [ ] |
+| `list_commits` | Returns list of commits | [ ] |
+| `get_commit` | Returns commit details | [ ] |
+| `get_commit_diff` | Returns diff entries | [ ] |
+| `compare_branches` | Returns comparison results | [ ] |
+
+---
+
 ## Test Summary
 
 | Category | Test | Status |
@@ -495,6 +660,9 @@ Check that:
 | MCP | SSE connection established | [ ] |
 | MCP | get_current_user returns user info | [ ] |
 | MCP | list_projects returns projects | [ ] |
+| Repository | list_branches returns branches | [ ] |
+| Repository | get_file_content returns decoded content | [ ] |
+| Repository | list_commits returns commits | [ ] |
 
 **Tester:** _____________________
 **Date:** _____________________

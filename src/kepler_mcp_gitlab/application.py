@@ -19,6 +19,7 @@ from kepler_mcp_gitlab.logging_config import get_logger
 from kepler_mcp_gitlab.tools.issues import register_issue_tools
 from kepler_mcp_gitlab.tools.merge_requests import register_merge_request_tools
 from kepler_mcp_gitlab.tools.projects import register_project_tools
+from kepler_mcp_gitlab.tools.repository import register_repository_tools
 
 if TYPE_CHECKING:
     from kepler_mcp_gitlab.config import Config
@@ -41,6 +42,7 @@ def register_application_tools(app: Any, config: Config) -> None:
     - Project tools (list, get, search projects)
     - Issue tools (list, create, update, comment on issues)
     - Merge Request tools (list, create, merge, approve MRs)
+    - Repository tools (branches, tags, files, commits)
 
     Args:
         app: FastMCP application instance
@@ -51,6 +53,7 @@ def register_application_tools(app: Any, config: Config) -> None:
     register_project_tools(app, config)
     register_issue_tools(app, config)
     register_merge_request_tools(app, config)
+    register_repository_tools(app, config)
 
     # Register utility tools
     _register_utility_tools(app, config)
